@@ -1,0 +1,82 @@
+const SPREADSHEET_ID = "1dpHiGMwO3oY0GmyoB0y_dMEBEzHPs8gwOyvTCnBS5Bk";
+const SHEET_NAME = "Logs";
+
+const HEADERS = [
+  "Data servidor", "Data cliente", "IP público", "Tipo do dispositivo", "Marca", "Modelo",
+  "Sistema", "Navegador", "User-Agent", "Plataforma", "Idioma", "Idiomas",
+  "Fuso horário", "Offset UTC (min)", "Tela", "Tela disponível", "Profundidade de cor",
+  "Pixel ratio", "Orientação", "Memória", "Núcleos", "Pontos de toque",
+  "Cookies habilitados", "Online", "Tipo de conexão", "Download estimado (Mbps)",
+  "Latência estimada (ms)", "Economia de dados", "URL", "Caminho", "Referência",
+  "UTM Source", "UTM Medium", "UTM Campaign", "gclid", "fbclid",
+  "Status da localização", "Latitude", "Longitude", "Precisão (m)"
+];
+
+function doGet() {
+  return responder({ success: true, message: "API de logs funcionando." });
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error("Nenhum dado recebido.");
+    }
+
+    const dados = JSON.parse(e.postData.contents);
+    const planilha = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let aba = planilha.getSheetByName(SHEET_NAME);
+
+    if (!aba) aba = planilha.insertSheet(SHEET_NAME);
+    garantirCabecalho(aba);
+
+    const linha = [
+      new Date(), dados.timestampClient, dados.ip, dados.deviceType, dados.brand, dados.model,
+      dados.operatingSystem, dados.browser, dados.userAgent, dados.platform, dados.language,
+      dados.languages, dados.timezone, dados.utcOffsetMinutes, dados.screen, dados.availableScreen,
+      dados.colorDepth, dados.pixelRatio, dados.orientation, dados.memory, dados.cpuCores,
+      dados.touchPoints, dados.cookiesEnabled, dados.online, dados.connectionType,
+      dados.connectionDownlinkMbps, dados.connectionRttMs, dados.connectionSaveData,
+      dados.pageUrl, dados.pagePath, dados.referrer, dados.utmSource, dados.utmMedium,
+      dados.utmCampaign, dados.gclid, dados.fbclid, dados.locationStatus, dados.latitude,
+      dados.longitude, dados.accuracy
+    ].map(limpar);
+
+    lock.waitLock(10000);
+    try {
+      aba.appendRow(linha);
+    } finally {
+      lock.releaseLock();
+    }
+
+    return responder({ success: true, message: "Log registrado." });
+  } catch (erro) {
+    console.error(erro);
+    return responder({ success: false, message: erro.message });
+  }
+}
+
+function garantirCabecalho(aba) {
+  const cabecalhoAtual = aba.getRange(1, 1, 1, HEADERS.length).getValues()[0];
+  const precisaAtualizar = aba.getLastRow() === 0 || HEADERS.some((item, i) => cabecalhoAtual[i] !== item);
+
+  if (precisaAtualizar) {
+    aba.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    aba.getRange(1, 1, 1, HEADERS.length).setFontWeight("bold");
+    aba.setFrozenRows(1);
+  }
+}
+
+function limpar(valor) {
+  if (valor === null || valor === undefined) return "";
+  let texto = String(valor).trim().substring(0, 1000);
+  if (/^[=+\-@]/.test(texto)) texto = "'" + texto;
+  return texto;
+}
+
+function responder(conteudo) {
+  return ContentService
+    .createTextOutput(JSON.stringify(conteudo))
+    .setMimeType(ContentService.MimeType.JSON);
+}

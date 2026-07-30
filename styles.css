@@ -1,0 +1,253 @@
+const GOOGLE_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbyuXvoqRqF1H8JZt5hbTOqTL7awxGt87F0CdASQLh0BbfzbBzMaBZtBDs-Xq-eeBmKFVA/exec";
+
+const privacyModal = document.getElementById("privacyModal");
+const openPrivacyBtn = document.getElementById("openPrivacyBtn");
+const footerPrivacyBtn = document.getElementById("footerPrivacyBtn");
+const closePrivacyBtn = document.getElementById("closePrivacyBtn");
+const locationNotice = document.getElementById("locationNotice");
+const dismissLocationNotice = document.getElementById("dismissLocationNotice");
+const toast = document.getElementById("toast");
+
+function openPrivacy() {
+  privacyModal?.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+
+function closePrivacy() {
+  privacyModal?.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+
+openPrivacyBtn?.addEventListener("click", openPrivacy);
+footerPrivacyBtn?.addEventListener("click", openPrivacy);
+closePrivacyBtn?.addEventListener("click", closePrivacy);
+dismissLocationNotice?.addEventListener("click", () => locationNotice?.classList.add("hidden"));
+
+privacyModal?.addEventListener("click", (event) => {
+  if (event.target === privacyModal) closePrivacy();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closePrivacy();
+});
+
+document.querySelectorAll("[data-scroll]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelector(button.dataset.scroll)?.scrollIntoView({ behavior: "smooth" });
+  });
+});
+
+document.querySelectorAll(".buy-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    toast?.classList.remove("hidden");
+    setTimeout(() => toast?.classList.add("hidden"), 2400);
+  });
+});
+
+function detectarNavegador() {
+  const ua = navigator.userAgent;
+  const regras = [
+    [/Edg\/([\d.]+)/, "Microsoft Edge"],
+    [/(?:OPR|Opera)\/([\d.]+)/, "Opera"],
+    [/Chrome\/([\d.]+)/, "Google Chrome"],
+    [/Firefox\/([\d.]+)/, "Mozilla Firefox"],
+    [/Version\/([\d.]+).*Safari/, "Safari"]
+  ];
+
+  for (const [regex, nome] of regras) {
+    const correspondencia = ua.match(regex);
+    if (correspondencia) return `${nome} ${correspondencia[1] || ""}`.trim();
+  }
+
+  return "Não identificado";
+}
+
+function detectarSistema() {
+  const ua = navigator.userAgent;
+
+  if (/Android/i.test(ua)) {
+    const versao = ua.match(/Android\s([0-9.]+)/i);
+    return versao ? `Android ${versao[1]}` : "Android";
+  }
+
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    const versao = ua.match(/OS\s([0-9_]+)/i);
+    return versao ? `iOS ${versao[1].replaceAll("_", ".")}` : "iOS";
+  }
+
+  if (/Windows NT 10.0/i.test(ua)) return "Windows 10/11";
+  if (/Windows/i.test(ua)) return "Windows";
+
+  if (/Mac OS X/i.test(ua)) {
+    const versao = ua.match(/Mac OS X\s([0-9_]+)/i);
+    return versao ? `macOS ${versao[1].replaceAll("_", ".")}` : "macOS";
+  }
+
+  if (/Linux/i.test(ua)) return "Linux";
+  return navigator.platform || "Não identificado";
+}
+
+function detectarDispositivo() {
+  const ua = navigator.userAgent;
+  let deviceType = "Computador";
+  let brand = "Não informado";
+  let model = "Não informado";
+
+  if (/iPhone/i.test(ua)) {
+    deviceType = "Celular";
+    brand = "Apple";
+    model = "iPhone";
+  } else if (/iPad/i.test(ua)) {
+    deviceType = "Tablet";
+    brand = "Apple";
+    model = "iPad";
+  } else if (/Android/i.test(ua)) {
+    deviceType = /Mobile/i.test(ua) ? "Celular" : "Tablet";
+    const match = ua.match(/Android[^;]*;\s*(?:[a-z]{2}-[A-Z]{2};\s*)?([^;)]+?)(?:\s+Build\/|;|\))/i);
+
+    if (match?.[1]) model = match[1].trim();
+    if (/Samsung|SM-/i.test(model)) brand = "Samsung";
+    else if (/Moto|Motorola/i.test(model)) brand = "Motorola";
+    else if (/Xiaomi|Redmi|Mi |POCO/i.test(model)) brand = "Xiaomi";
+    else if (/Pixel/i.test(model)) brand = "Google";
+    else if (/Huawei/i.test(model)) brand = "Huawei";
+    else if (/OnePlus/i.test(model)) brand = "OnePlus";
+  }
+
+  return { deviceType, brand, model };
+}
+
+function detectarConexao() {
+  const conexao = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (!conexao) return { type: "Não informado", downlink: "", rtt: "", saveData: "" };
+
+  return {
+    type: conexao.effectiveType || conexao.type || "Não informado",
+    downlink: Number.isFinite(conexao.downlink) ? conexao.downlink : "",
+    rtt: Number.isFinite(conexao.rtt) ? conexao.rtt : "",
+    saveData: typeof conexao.saveData === "boolean" ? conexao.saveData : ""
+  };
+}
+
+async function obterIpPublico() {
+  try {
+    const resposta = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
+    if (!resposta.ok) throw new Error("Falha ao consultar IP");
+    const dados = await resposta.json();
+    return dados.ip || "Não identificado";
+  } catch (erro) {
+    console.warn("Não foi possível consultar o IP público:", erro);
+    return "Não identificado";
+  }
+}
+
+function obterLocalizacaoOpcional() {
+  return new Promise((resolve) => {
+    if (!("geolocation" in navigator)) {
+      resolve({ locationStatus: "Não suportada", latitude: "", longitude: "", accuracy: "" });
+      return;
+    }
+
+    locationNotice?.classList.remove("hidden");
+
+    const timeout = setTimeout(() => {
+      resolve({ locationStatus: "Tempo esgotado", latitude: "", longitude: "", accuracy: "" });
+    }, 12000);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        clearTimeout(timeout);
+        locationNotice?.classList.add("hidden");
+        resolve({
+          locationStatus: "Autorizada",
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+          accuracy: Math.round(position.coords.accuracy)
+        });
+      },
+      (error) => {
+        clearTimeout(timeout);
+        locationNotice?.classList.add("hidden");
+        const status = {
+          1: "Negada",
+          2: "Indisponível",
+          3: "Tempo esgotado"
+        }[error.code] || "Não obtida";
+        resolve({ locationStatus: status, latitude: "", longitude: "", accuracy: "" });
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000
+      }
+    );
+  });
+}
+
+async function registrarAcesso() {
+  const dispositivo = detectarDispositivo();
+  const conexao = detectarConexao();
+
+  // O site segue normalmente mesmo se a localização for negada ou indisponível.
+  const [ip, localizacao] = await Promise.all([
+    obterIpPublico(),
+    obterLocalizacaoOpcional()
+  ]);
+
+  const parametros = new URLSearchParams(window.location.search);
+
+  const dados = {
+    timestampClient: new Date().toISOString(),
+    ip,
+    deviceType: dispositivo.deviceType,
+    brand: dispositivo.brand,
+    model: dispositivo.model,
+    operatingSystem: detectarSistema(),
+    browser: detectarNavegador(),
+    userAgent: navigator.userAgent,
+    platform: navigator.platform || "",
+    language: navigator.language || "Não informado",
+    languages: Array.isArray(navigator.languages) ? navigator.languages.join(", ") : "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Não informado",
+    utcOffsetMinutes: new Date().getTimezoneOffset(),
+    screen: `${window.screen.width}x${window.screen.height}`,
+    availableScreen: `${window.screen.availWidth}x${window.screen.availHeight}`,
+    colorDepth: window.screen.colorDepth || "",
+    pixelRatio: window.devicePixelRatio || 1,
+    orientation: window.screen.orientation?.type || "",
+    memory: navigator.deviceMemory ? `${navigator.deviceMemory} GB` : "Não informado",
+    cpuCores: navigator.hardwareConcurrency || "Não informado",
+    touchPoints: navigator.maxTouchPoints || 0,
+    cookiesEnabled: navigator.cookieEnabled,
+    online: navigator.onLine,
+    connectionType: conexao.type,
+    connectionDownlinkMbps: conexao.downlink,
+    connectionRttMs: conexao.rtt,
+    connectionSaveData: conexao.saveData,
+    pageUrl: window.location.href,
+    pagePath: window.location.pathname,
+    referrer: document.referrer || "Acesso direto",
+    utmSource: parametros.get("utm_source") || "",
+    utmMedium: parametros.get("utm_medium") || "",
+    utmCampaign: parametros.get("utm_campaign") || "",
+    gclid: parametros.get("gclid") || "",
+    fbclid: parametros.get("fbclid") || "",
+    ...localizacao
+  };
+
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(dados),
+      keepalive: true
+    });
+    console.log("Registro de acesso enviado.");
+  } catch (erro) {
+    console.error("Erro ao enviar registro:", erro);
+  }
+}
+
+window.addEventListener("load", registrarAcesso, { once: true });
